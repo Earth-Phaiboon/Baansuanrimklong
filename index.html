@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ลงเวลาทำงานร้าน BOOBUN Phit'lok</title>
+  <title>ลงเวลาทำงานร้านอาหารบ้านสวนริมคลอง</title>
   <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
     body { font-family: 'Kanit', sans-serif; text-align: center; padding: 20px; background: #f0f2f5; }
@@ -26,10 +26,10 @@
 
 <script>
 const LIFF_ID =  '2008726712-TyWc8pGY';//ใส่_LIFF_ID_ที่นี่
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwPIOor4kKun6OBn2LD1imBdIT5_HyrfzByGiJkXH8FPC-aMm--1LN-8k22EQvriLqj_Q/exec';//ใส่_GAS_URL_ที่นี่
-const OFFICE_LAT = 16.4409792; // ใส่ละติจูดบริษัท
-const OFFICE_LNG = 100.2679006; // ใส่ลองจิจูดบริษัท
-const ALLOWED_DISTANCE = 200; // อนุญาตในรัศมี 200 เมตร
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxER0kiWapDcbG5KeWkH2l8fNt4dRnLFy2EWCkxaHev8DNT8OoLkmjEGcWxjJdziDcS/exec';//ใส่_GAS_URL_ที่นี่
+const OFFICE_LAT = 16.930344808581204; // ใส่ละติจูดบริษัท  16.930344808581204, 100.24276513233517
+const OFFICE_LNG =  100.24276513233517; // ใส่ลองจิจูดบริษัท
+const ALLOWED_DISTANCE = 100; // อนุญาตในรัศมี หน่วยเป็น เมตร
 
 async function main() {
   try {
@@ -85,14 +85,14 @@ async function processAttendance(status) {
       const uLng = pos.coords.longitude;
       const distance = getDistance(uLat, uLng, OFFICE_LAT, OFFICE_LNG);
       const roundedDistance = Math.round(distance);
-          /*
+          
             // --- ตรวจสอบเงื่อนไขระยะทาง ---
             if (distance > ALLOWED_DISTANCE) {
                 msgEl.innerText = "นอกพื้นที่!";
                 alert(`❌ บันทึกไม่สำเร็จ!\nคุณอยู่ห่างจากบริษัท ${roundedDistance} เมตร\n(ต้องอยู่ในระยะไม่เกิน ${ALLOWED_DISTANCE} เมตร)`);
                 return; // หยุดการทำงานทันที ไม่ส่งข้อมูลไป GAS และไม่ส่ง Flex
             }
-            */
+            
       msgEl.innerText = "พิกัดถูกต้อง กำลังบันทึกข้อมูล...";
       const profile = await liff.getProfile();
       const context = liff.getContext();
@@ -275,6 +275,7 @@ main();
 </script>
 </body>
 </html>
+
 
 
 
