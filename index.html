@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ลงเวลาทำงานร้าน BOOBUN Phit'lok</title>
+  <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    body { font-family: 'Kanit', sans-serif; text-align: center; padding: 20px; background: #f0f2f5; }
+    .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .btn { width: 100%; padding: 15px; margin: 10px 0; font-size: 1.2rem; border: none; border-radius: 10px; color: white; font-weight: bold; cursor: pointer; }
+    .btn-in { background: #28a745; }
+    #status-msg { color: #666; font-size: 0.9rem; margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <img id="userImg" width="80" style="border-radius: 50%; display: none;">
+  <h2 id="userName">กำลังโหลดข้อมูล...</h2>
+  <hr>
+  <button class="btn btn-in" onclick="processAttendance('เข้างาน')">ลงเวลาเข้างาน</button>
+  <button class="btn" style="background:#dc3545" onclick="processAttendance('ออกงาน')">ลงเวลาออกงาน</button>
+  <p id="status-msg">กรุณารอสักครู่...</p>
+</div>
+
+<script>
+const LIFF_ID =  '2008726712-TyWc8pGY';//ใส่_LIFF_ID_ที่นี่
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwPIOor4kKun6OBn2LD1imBdIT5_HyrfzByGiJkXH8FPC-aMm--1LN-8k22EQvriLqj_Q/exec';//ใส่_GAS_URL_ที่นี่
+const OFFICE_LAT = 16.4409792; // ใส่ละติจูดบริษัท
+const OFFICE_LNG = 100.2679006; // ใส่ลองจิจูดบริษัท
+const ALLOWED_DISTANCE = 200; // อนุญาตในรัศมี 200 เมตร
+
+async function main() {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    
+    // ตรวจสอบว่ามี Token ที่ใช้งานได้จริงไหม
+    if (!liff.isLoggedIn()) {
+      liff.login();
+    } else {
+      try {
+        const profile = await liff.getProfile();
+        document.getElementById('userName').innerText = "สวัสดี " + profile.displayName;
+        document.getElementById('userImg').src = profile.pictureUrl;
+        document.getElementById('userImg').style.display = 'inline-block';
+        document.getElementById('status-msg').innerText = "ระบบพร้อมใช้งาน";
+      } catch (profileError) {
+        // หาก getProfile พังเพราะ Token ถูก Revoke ให้ Logout แล้ว Login ใหม่
+        console.error("Token error, logging out...");
+        liff.logout();
+        liff.login();
+      }
+    }
+  } catch (err) {
+    console.error("Init Error:", err);
+    // หากเกิด Error เรื่อง Access Token ตอน Init ให้ลอง Login ใหม่
+    if (err.message.includes("revoked")) {
+      liff.login();
+    } else {
+      document.getElementById('status-msg').innerText = "Init Error: " + err.message;
+    }
+  }
+}
+
+// ฟังก์ชันคำนวณระยะห่าง (เมตร)
+function getDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371e3; 
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+async function processAttendance(status) {
+  const msgEl = document.getElementById('status-msg');
+  msgEl.innerText = "กำลังตรวจเช็คพิกัด...";
+
+  try {
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const uLat = pos.coords.latitude;
+      const uLng = pos.coords.longitude;
+      const distance = getDistance(uLat, uLng, OFFICE_LAT, OFFICE_LNG);
+      const roundedDistance = Math.round(distance);
+          /*
+            // --- ตรวจสอบเงื่อนไขระยะทาง ---
+            if (distance > ALLOWED_DISTANCE) {
+                msgEl.innerText = "นอกพื้นที่!";
+                alert(`❌ บันทึกไม่สำเร็จ!\nคุณอยู่ห่างจากบริษัท ${roundedDistance} เมตร\n(ต้องอยู่ในระยะไม่เกิน ${ALLOWED_DISTANCE} เมตร)`);
+                return; // หยุดการทำงานทันที ไม่ส่งข้อมูลไป GAS และไม่ส่ง Flex
+            }
+            */
+      msgEl.innerText = "พิกัดถูกต้อง กำลังบันทึกข้อมูล...";
+      const profile = await liff.getProfile();
+      const context = liff.getContext();
+      
+      // ป้องกันรูปโปรไฟล์ว่าง (ถ้าไม่มีห้ใช้รูปว่างๆ แทน)
+      const userPicture = profile.pictureUrl || "https://img.icons8.com/bubbles/2x/user.png";
+
+      const payload = {
+        userId: profile.userId,
+        displayName: profile.displayName,
+        status: status,
+        location: `${uLat},${uLng}`,
+        distance: Math.round(distance)
+      };
+
+      // --- ส่วนที่ 1: ส่ง Flex Message ---
+      if (liff.isInClient() && (context.type === 'group' || context.type === 'room' || context.type === 'utou')) {
+        msgEl.innerText = "กำลังส่งข้อความเข้ากลุ่ม...";
+       const flexMessage = {
+              type: "flex",
+              altText: `📍 ${profile.displayName} ลงเวลา ${status} เรียบร้อยแล้ว`,
+              contents: {
+                "type": "bubble",
+                "size": "mega",
+                "header": {
+                  "type": "box",
+                  "layout": "vertical",
+                  "contents": [
+                    {
+                      "type": "box",
+                      "layout": "horizontal",
+                      "contents": [
+                        {
+                          "type": "text",
+                          "text": "ATTENDANCE RECORD",
+                          "weight": "bold",
+                          "color": "#ffffff",
+                          "size": "sm"
+                        }
+                      ]
+                    }
+                  ],
+                  "backgroundColor": "#28a745",
+                  "paddingTop": "15px",
+                  "paddingBottom": "15px"
+                },
+                "body": {
+                  "type": "box",
+                  "layout": "vertical",
+                  "contents": [
+                    {
+                      "type": "box",
+                      "layout": "horizontal",
+                      "contents": [
+                        {
+                          "type": "box",
+                          "layout": "vertical",
+                          "contents": [
+                            {
+                              "type": "image",
+                              "url": "https://www.w3schools.com/howto/img_avatar.png",
+                              "aspectMode": "cover",
+                              "size": "full"
+                            }
+                          ],
+                          "cornerRadius": "100px",
+                          "width": "60px",
+                          "height": "60px"
+                        },
+                        {
+                          "type": "box",
+                          "layout": "vertical",
+                          "contents": [
+                            {
+                              "type": "text",
+                              "text": profile.displayName,
+                              "weight": "bold",
+                              "size": "xl",
+                              "margin": "sm"
+                            },
+                            {
+                              "type": "text",
+                              "text": "บันทึกข้อมูลเรียบร้อยแล้ว",
+                              "size": "xs",
+                              "color": "#888888"
+                            }
+                          ],
+                          "margin": "lg"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "separator",
+                      "margin": "xl"
+                    },
+                    {
+                      "type": "box",
+                      "layout": "vertical",
+                      "margin": "xl",
+                      "spacing": "sm",
+                      "contents": [
+                        {
+                          "type": "box",
+                          "layout": "horizontal",
+                          "contents": [
+                            { "type": "text", "text": "สถานะ", "color": "#aaaaaa", "size": "sm", "flex": 2 },
+                            { "type": "text", "text": status, "weight": "bold", "size": "sm", "color": status === 'เข้างาน' ? "#28a745" : "#dc3545", "flex": 4 }
+                          ]
+                        },
+                        {
+                          "type": "box",
+                          "layout": "horizontal",
+                          "contents": [
+                            { "type": "text", "text": "วัน-เวลา", "color": "#aaaaaa", "size": "sm", "flex": 2 },
+                            { "type": "text", "text": new Date().toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' }), "size": "sm", "color": "#444444", "flex": 4 }
+                          ]
+                        },
+                        {
+                          "type": "box",
+                          "layout": "horizontal",
+                          "contents": [
+                            { "type": "text", "text": "พิกัด", "color": "#aaaaaa", "size": "sm", "flex": 2 },
+                            { "type": "text", "text": "📍 ในพื้นที่ที่กำหนด", "size": "sm", "color": "#17a2b8", "flex": 4 }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "footer": {
+                  "type": "box",
+                  "layout": "vertical",
+                  "contents": [
+                    {
+                      "type": "text",
+                      "text": "HR AUTOMATION SYSTEM",
+                      "size": "xxs",
+                      "color": "#aaaaaa",
+                      "align": "center"
+                    }
+                  ]
+                },
+                "styles": {
+                  "footer": {
+                    "separator": true
+                  }
+                }
+              }
+              };
+
+        try {
+          
+          await liff.sendMessages([flexMessage]);
+        } catch (e) {
+          console.error("Flex Message Error:", e);
+          alert("ไม่สามารถส่ง Flex ได้: " + e.message); // จะแจ้งเตือนถ้าลืมเปิด Scopes
+        }
+      }
+
+      // --- ส่วนที่ 2: ส่งข้อมูลไป Google Sheets ---
+      msgEl.innerText = "กำลังบันทึกข้อมูล...";
+      await fetch(GAS_URL, {
+        method: "POST",
+        body: JSON.stringify(payload),
+        mode: 'no-cors'
+      });
+
+      msgEl.innerText = "บันทึกสำเร็จ!";
+      setTimeout(() => { liff.closeWindow(); }, 1500);
+
+    }, (err) => {
+      alert("กรุณาเปิด GPS และอนุญาตสิทธิ์ตำแหน่งในมือถือ");
+    });
+  } catch (err) {
+    alert("เกิดข้อผิดพลาด: " + err.message);
+  }
+}
+
+main();
+</script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
